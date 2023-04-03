@@ -534,17 +534,24 @@ class ConfigLoaderImpl(ConfigLoader):
         defaults: List[ResultDefault],
         repo: IConfigRepository,
     ) -> DictConfig:
+        import mergedeep
         cfg = OmegaConf.create()
+        _cfg = {}
         with flag_override(cfg, "no_deepcopy_set_nodes", True):
             for default in defaults:
                 loaded = self._load_single_config(default=default, repo=repo)
                 try:
-                    cfg.merge_with(loaded.config)
+                    if default.package.startswith('hydra'):
+                        cfg.merge_with(loaded.config)
+                    else:
+                        mergedeep.merge(_cfg, OmegaConf.to_container(loaded.config))
                 except OmegaConfBaseException as e:
                     raise ConfigCompositionException(
                         f"In '{default.config_path}': {type(e).__name__} raised while"
                         f" composing config:\n{e}"
                     ).with_traceback(sys.exc_info()[2])
+
+        cfg.merge_with(_cfg)
 
         # # remove remaining defaults lists from all nodes.
         def strip_defaults(cfg: Any) -> None:
